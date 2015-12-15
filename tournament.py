@@ -111,6 +111,7 @@ def swissPairings():
     """
     DB = connect()
     c = DB.cursor()
+    #pair players and check in match_records table if they have played each other already
     c.execute("SELECT a.id AS id1, a.name AS name1, b.id AS id2, b.name AS name2 \
     FROM players AS a INNER JOIN players AS b ON a.wins = b.wins WHERE a.id!=b.id AND \
     (a.id, b.id) not IN (SELECT winner, loser FROM match_records) AND \
