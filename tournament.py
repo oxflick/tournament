@@ -5,39 +5,63 @@
 
 import psycopg2
 
+class DB:
+
+    def __init__(self, db_con_str="dbname=tournament"):
+        """
+        Creates a database connection with the connection string provided
+        :param str db_con_str: Contains the database connection string, with a default value when no argument is passed to the parameter
+        """
+        self.conn = psycopg2.connect(db_con_str)
+
+    def cursor(self):
+        """
+        Returns the current cursor of the database
+        """
+        return self.conn.cursor();
+
+    def execute(self, sql_query_string, and_close=False):
+        """
+        Executes SQL queries
+        :param str sql_query_string: Contain the query string to be executed
+        :param bool and_close: If true, closes the database connection after executing and commiting the SQL Query
+        """
+        cursor = self.cursor()
+        cursor.execute(sql_query_string)
+        if and_close:
+            self.conn.commit()
+            self.close()
+        return {"conn": self.conn, "cursor": cursor if not and_close else None}
+
+    def close(self):
+        """
+        Closes the current database connection
+        """
+        return self.conn.close()
 
 def connect():
-    """Connect to the PostgreSQL database.  Returns a database connection."""
+    """Connect to the PostgreSQL database.
+    Returns: a database connection.
+    """
     return psycopg2.connect("dbname=tournament")
 
 
 def deleteMatches():
     """Remove all the match records from the database."""
-    DB = connect()
-    c = DB.cursor()
-    c.execute("DELETE FROM match_records")
-    DB.commit()
-    DB.close()
-
+    DB().execute("DELETE FROM match_records", True)
+    
 
 def deletePlayers():
     """Remove all the player records from the database."""
-    DB = connect()
-    c = DB.cursor()
-    c.execute("DELETE FROM players")
-    DB.commit()
-    DB.close()
-
+    DB().execute("DELETE FROM players", True)
+    
 
 def countPlayers():
     """Returns the number of players currently registered."""
-    DB = connect()
-    c = DB.cursor()
-    c.execute("SELECT count(*) FROM players")
-    result = int(c.fetchone()[0])
-    DB.commit()
-    DB.close()
-    return result
+    conn = DB().execute("SELECT count(*) FROM players")
+    cursor = conn["cursor"].fetchone()
+    conn['conn'].close()
+    return cursor[0]
 
 
 def registerPlayer(name):
@@ -51,7 +75,7 @@ def registerPlayer(name):
     """
     DB = connect()
     c = DB.cursor()
-    c.execute("INSERT INTO players (name, wins, matches) VALUES (%s, 0, 0) RETURNING id;", (name,))
+    c.execute("INSERT INTO players (name) VALUES(%s);", (name,))
     DB.commit()
     DB.close()
      
@@ -69,13 +93,10 @@ def playerStandings():
         wins: the number of matches the player has won
         matches: the number of matches the player has played
     """
-    DB = connect()
-    c = DB.cursor()
-    c.execute("SELECT id, name, wins, matches FROM players ORDER BY wins DESC")
-    standings = c.fetchall()
-    DB.commit()
-    DB.close()
-    return standings
+    conn = DB().execute("SELECT id, name, wins, matches FROM standings ORDER BY wins DESC")
+    cursor = conn["cursor"].fetchall()
+    conn['conn'].close()
+    return cursor
     
 
 def reportMatch(winner, loser):
@@ -87,9 +108,7 @@ def reportMatch(winner, loser):
     """
     DB = connect()
     c = DB.cursor()
-    c.execute("INSERT INTO match_records(winner, loser) VALUES(%s, %s)",(winner,loser))
-    c.execute("UPDATE players SET (matches, wins) = ((matches + 1), (wins + 1)) WHERE id = %s ", (winner,))
-    c.execute("UPDATE players SET matches = (matches+1) WHERE id = %s", (loser,))
+    c.execute("INSERT INTO match_records(winner, loser) VALUES(%s, %s)",(winner,loser ))
     DB.commit()
     DB.close()
  
@@ -108,17 +127,18 @@ def swissPairings():
         name1: the first player's name
         id2: the second player's unique id
         name2: the second player's name
-    """
-    DB = connect()
-    c = DB.cursor()
-    #pair players and check in match_records table if they have played each other already
-    c.execute("SELECT a.id AS id1, a.name AS name1, b.id AS id2, b.name AS name2 \
-    FROM players AS a INNER JOIN players AS b ON a.wins = b.wins WHERE a.id!=b.id AND \
-    (a.id, b.id) not IN (SELECT winner, loser FROM match_records) AND \
-    (b.id, a.id) not IN (SELECT winner, loser FROM match_records)")
-    result = c.fetchall()
-    DB.commit()
-    DB.close()
-    return result[:len(result)/2]
+    """    
+    conn = DB().execute("SELECT id, name, wins FROM standings ORDER BY wins DESC;")
+    cursor = conn["cursor"].fetchall()
+    conn['conn'].close()
+    i=0
+    swissPairings = []
+    while i < len(cursor):
+        id1 = cursor[i][0]
+        name1 = cursor[i][1]
+        id2 = cursor[i+1][0]
+        name2 = cursor[i+1][1]
+        swissPairings.append((id1,name1,id2,name2))
+        i=i+2
 
-
+    return swissPairings
